@@ -27,11 +27,13 @@ typedef struct _Luz Luz;
 #define LUZ_MAX_COATS   16
 #define LUZ_SPECTRUM_START   390  /*                 380nm */
 #define LUZ_SPECTRUM_GAP     10
-#define LUZ_SPECTRUM_BANDS   31   /* 380 + 15 * 24 = 740nm */
+#define LUZ_SPECTRUM_BANDS   31   /* 380 + 10 * 31 = 790nm */
 // START + GAP * BANDS should be around 700 to cover visual range
 
 Luz    *luz_new                (const char  *config);
 void    luz_destroy            (Luz         *luz);
+
+
 void    luz_coats_to_xyz       (Luz         *luz,
                                 const float *coat_levels,
                                 float       *xyz);
@@ -55,9 +57,20 @@ Spectrum luz_parse_spectrum (Luz *luz, char *spectrum);
 const Spectrum *luz_get_spectrum (Luz *luz, const char *name);
 void            luz_set_spectrum (Luz *luz, const char *name, Spectrum *spectrum);
 
-void luz_spectrum_to_rgb (Luz         *luz,
-                          const Spectrum *observed,
+Spectrum luz_coats_to_spectrum  (Luz         *luz,
+                                 const float *coat_levels);
+
+Spectrum luz_rgb_to_spectrum (Luz *luz, float r, float g, float b);
+
+void luz_spectrum_to_rgb (Luz            *luz,
+                          const Spectrum *spectrum,
                           float          *rgb);
+
+void luz_spectrum_to_xyz (Luz            *luz,
+                          const Spectrum *spectrum,
+                          float          *x,
+                          float          *y,
+                          float          *z);
 
 struct _Spectrum {
   float bands[LUZ_SPECTRUM_BANDS];

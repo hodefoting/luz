@@ -36,7 +36,17 @@ int main (int argc, char **argv)
   babl_init ();
   Luz *luz = luz_new ("");
   float maxband = 0;
-  Spectrum spec = luz_parse_spectrum (luz, argv[1]?argv[1]:"observer_x");//{{0,0,0,0,0,0,0,0,0,0,0}};
+
+//y  Spectrum spec = luz_parse_spectrum (luz, argv[1]?argv[1]:"observer_x");//{{0,0,0,0,0,0,0,0,0,0,0}};
+    Spectrum spec = luz_parse_spectrum (luz, argv[1]?argv[1]:"observer_x");//{{0,0,0,0,0,0,0,0,0,0,0}};
+    Spectrum specb = luz_parse_spectrum (luz, argv[2]?argv[2]:"observer_x");//{{0,0,0,0,0,0,0,0,0,0,0}};
+
+  int i;
+  for (i = 0; i < LUZ_SPECTRUM_BANDS; i++)
+  {
+    spec.bands[i] *= specb.bands[i];
+  }
+
   for (int b = 0; b < WIDTH; b++)
   {
     Spectrum rspec;

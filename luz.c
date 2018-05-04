@@ -239,11 +239,23 @@ spectrum_to_xyz (Luz  *luz,
                  float          *z)
 {
   Spectrum rescaled = *observed;
-//  spectrum_scale (&rescaled, &rescaled, &luz->illuminant);
 
-  *x = spectrum_integrate (&rescaled, &luz->STANDARD_OBSERVER_X) * luz->rev_y_scale;
-  *y = spectrum_integrate (&rescaled, &luz->STANDARD_OBSERVER_Y) * luz->rev_y_scale;
-  *z = spectrum_integrate (&rescaled, &luz->STANDARD_OBSERVER_Z) * luz->rev_y_scale;
+  *x = spectrum_integrate (&rescaled, &luz->STANDARD_OBSERVER_X) *
+         luz->rev_y_scale;
+  *y = spectrum_integrate (&rescaled, &luz->STANDARD_OBSERVER_Y) *
+         luz->rev_y_scale;
+  *z = spectrum_integrate (&rescaled, &luz->STANDARD_OBSERVER_Z) *
+         luz->rev_y_scale;
+}
+
+void
+luz_spectrum_to_xyz (Luz  *luz,
+                     const Spectrum *observed,
+                     float          *x,
+                     float          *y,
+                     float          *z)
+{
+  spectrum_to_xyz (luz, observed, x, y, z);
 }
 
 static const Babl *fish = NULL;
@@ -255,28 +267,19 @@ spectrum_to_rgb (Luz            *luz,
 {
   float xyz[3];
   spectrum_to_xyz (luz, observed, &xyz[0], &xyz[1], &xyz[2]);
-#if 1
-  /* Multiply by the inverse of the D50-adapted sRGB RGB to XYZ matrix.
-   */
-  rgb[0] = xyz[0] * 3.134274799724 + xyz[1] * -1.617275708956 + xyz[2] * -0.490724283042;
-  rgb[1] = xyz[0] * -0.978795575994 + xyz[1] * 1.916161689117 + xyz[2] * 0.033453331711;
-  rgb[2] = xyz[0] * 0.071976988401 + xyz[1] * -0.228984974402 + xyz[2] * 1.405718224383;
-#else
-  if (!fish) fish = babl_fish (babl_format ("CIE XYZ float"), babl_format ("RGB float"));
-  babl_process (fish, &xyz[0], rgb, 1);
-#endif
-#if 0
-  if (rgb[0] < 0)
-    rgb[0] = 0;
-  if (rgb[1] < 0)
-    rgb[1] = 0;
-  if (rgb[2] < 0)
-    rgb[2] = 0;
-#endif
+  rgb[0] = xyz[0] * 3.134274799724 +
+           xyz[1] * -1.617275708956 +
+           xyz[2] * -0.490724283042;
+  rgb[1] = xyz[0] * -0.978795575994 +
+           xyz[1] * 1.916161689117 +
+           xyz[2] * 0.033453331711;
+  rgb[2] = xyz[0] * 0.071976988401 +
+           xyz[1] * -0.228984974402 +
+           xyz[2] * 1.405718224383;
 }
 
 void
-luz_spectrum_to_rgb (Luz         *luz,
+luz_spectrum_to_rgb (Luz            *luz,
                      const Spectrum *observed,
                      float          *rgb)
 {
@@ -292,7 +295,7 @@ static void color_recompute (Luz *luz, Coat *coat)
     {
       float white = coat->on_white.bands[i];
       float black = coat->on_black.bands[i];
-      if (white <= 0.00001) // avoiding division by zero
+      if (white <= 0.00001)
         white = 0.00001;
       coat->opaqueness.bands[i] = black/white;
       if (coat->opaqueness.bands[i] > 1.0)
@@ -602,7 +605,7 @@ void luz_rgb_to_coats (Luz  *luz, const float *rgb, float *coat_levels)
           finding some other basis functions. One can even have multiple
           different basises if some types are closer to some color mixing
           than others. */
-static Spectrum rgb_to_spectrum (Luz *luz, float r, float g, float b)
+static Spectrum _rgb_to_spectrum (Luz *luz, float r, float g, float b)
 {
   Spectrum s;
   int i;
@@ -613,6 +616,11 @@ static Spectrum rgb_to_spectrum (Luz *luz, float r, float g, float b)
   for (i = 0; i<LUZ_SPECTRUM_BANDS; i++)
     s.bands[i] = red.bands[i] * powf(r,2.2) + green.bands[i] * powf(g,2.2) + blue.bands[i] * powf(b, 2.2);
   return s;
+}
+
+Spectrum luz_rgb_to_spectrum (Luz *luz, float r, float g, float b)
+{
+  return _rgb_to_spectrum (luz, r, g, b);
 }
 
 Spectrum luz_parse_spectrum (Luz *luz, char *spectrum)
@@ -640,7 +648,7 @@ Spectrum luz_parse_spectrum (Luz *luz, char *spectrum)
     if (p) g = strtod (p, &p);
     if (p) b = strtod (p, &p);
 
-    s = rgb_to_spectrum (luz, r, g, b);
+    s = _rgb_to_spectrum (luz, r, g, b);
 
   }
 
@@ -982,4 +990,10 @@ float luz_get_coverage_limit (Luz *luz)
 void luz_set_coverage_limit (Luz *luz, float limit)
 {
   luz->coverage_limit = limit;
+}
+
+Spectrum luz_coats_to_spectrum  (Luz         *luz,
+                                 const float *coat_levels)
+{
+  return coats_to_spectrum (luz, coat_levels);
 }
