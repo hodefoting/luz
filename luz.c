@@ -372,13 +372,32 @@ colordiff (float *rgb_a,
     (rgb_a[2]-rgb_b[2])*(rgb_a[2]-rgb_b[2]);
 }
 
+static inline float
+spec_diff_squared (const float *spec_a,
+                   const float *spec_b,
+                   int    bands)
+{
+  float sum = 0.0;
+  int i;
+  /* using CIE Lab delta E here, would not improve things, and be a waste of cycles.
+   */
+  for (i = 0; i < bands; i++)
+    {
+      sum += (spec_a[i] - spec_b[i]) *
+             (spec_a[i] - spec_b[i]);
+    }
+
+  return sum;
+}
+
 static inline void
 luz_rgb_to_coats_stochastic (Luz *luz,
-                                    float  *rgb,
-                                    float  *coat_levels,
-                                    int     iterations,
-                                    float   rrange0,
-                                    float   rrange1)
+                             const float  *rgb,
+                             Spectrum *spectrum, // if passed rgb is ignored
+                             float  *coat_levels,
+                             int     iterations,
+                             float   rrange0,
+                             float   rrange1)
 {
   float prev_best[LUZ_MAX_COATS] = {};
   float best[LUZ_MAX_COATS] = {};
@@ -402,10 +421,18 @@ luz_rgb_to_coats_stochastic (Luz *luz,
         coatsum += attempt[j];
       }
 
-    luz_coats_to_rgb (luz, attempt, softrgb);
-    diff = colordiff (rgb, softrgb)
-    /* when optimizing we also the the coat amount into account */
-    ;//+ (coatsum / luz->coats / 25000);
+    if (spectrum)
+    {
+      Spectrum soft_spect = luz_coats_to_spectrum (luz, attempt);
+      diff = spec_diff_squared (&spectrum->bands[0],
+                                &soft_spect.bands[0],
+                                LUZ_SPECTRUM_BANDS);
+    }
+    else
+    {
+      luz_coats_to_rgb (luz, attempt, softrgb);
+      diff = spec_diff_squared (rgb, softrgb, 3);
+    }
     if (diff < bestdiff)
     {
       bestdiff = diff;
@@ -447,7 +474,8 @@ luz_rgb_to_coats_stochastic (Luz *luz,
 
 static inline void
 luz_rgb_to_coats_griddy (Luz   *luz,
-                         float *rgb,
+                         const float *rgb,
+                         Spectrum *spectrum, // if passed rgb is ignored
                          float *coat_levels)
 {
   float prev_best[LUZ_MAX_COATS] = {};
@@ -475,9 +503,20 @@ luz_rgb_to_coats_griddy (Luz   *luz,
 
     if (coatsum <= luz->coverage_limit)
     {
-    luz_coats_to_rgb (luz, attempt, softrgb);
-    //diff = colordiff (rgb, softrgb) * coatsum;// + (coatsum / luz->coats / 200);
-    diff = colordiff (rgb, softrgb);
+      if (spectrum)
+      {
+        Spectrum soft_spec = luz_coats_to_spectrum (luz, attempt);
+        diff = spec_diff_squared (&spectrum->bands[0],
+                                  &soft_spec.bands[0],
+                                  LUZ_SPECTRUM_BANDS);
+      }
+      else
+      {
+        luz_coats_to_rgb (luz, attempt, softrgb);
+        //diff = colordiff (rgb, softrgb) * coatsum;// + (coatsum / luz->coats / 200);
+        diff = spec_diff_squared (rgb, softrgb, 3);
+      }
+
     if (diff < bestdiff)
     {
       bestdiff = diff;
@@ -509,6 +548,14 @@ luz_rgb_to_coats_griddy (Luz   *luz,
     coat_levels[i] = best[i];
 }
 
+static inline void _rgb_to_coats (Luz  *luz, const float *rgb, Spectrum *spectrum, float *coat_levels)
+{
+  luz_rgb_to_coats_griddy (luz, rgb, spectrum, coat_levels);
+  luz_rgb_to_coats_stochastic (luz, rgb, spectrum, coat_levels,
+                               luz->STOCHASTIC_ITERATIONS,
+                               luz->STOCHASTIC_DIFFUSION0,
+                               luz->STOCHASTIC_DIFFUSION1);
+}
 
 static inline float *
 ensure_lut (Luz *luz,
@@ -524,9 +571,7 @@ ensure_lut (Luz *luz,
                      (float)gi / LUT_DIM,
                      (float)bi / LUT_DIM };
     luz->lut[l_index].defined = 2;
-
-    luz_rgb_to_coats_griddy (luz, trgb, &luz->lut[l_index].level[0]);
-    luz_rgb_to_coats_stochastic (luz, trgb, &luz->lut[l_index].level[0], luz->STOCHASTIC_ITERATIONS, luz->STOCHASTIC_DIFFUSION0, luz->STOCHASTIC_DIFFUSION1);
+    _rgb_to_coats (luz, trgb, NULL, &luz->lut[l_index].level[0]);
     luz->lut[l_index].defined = 1;
   }
 
@@ -618,12 +663,14 @@ static Spectrum _rgb_to_spectrum (Luz *luz, float r, float g, float b)
   return s;
 }
 
-Spectrum luz_rgb_to_spectrum (Luz *luz, float r, float g, float b)
+Spectrum
+luz_rgb_to_spectrum (Luz *luz, float r, float g, float b)
 {
   return _rgb_to_spectrum (luz, r, g, b);
 }
 
-Spectrum luz_parse_spectrum (Luz *luz, char *spectrum)
+Spectrum
+luz_parse_spectrum (Luz *luz, char *spectrum)
 {
   Spectrum s;
   char key[32];
